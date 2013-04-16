@@ -33,3 +33,9 @@ nosetests.xml
 .mr.developer.cfg
 .project
 .pydevproject
+
+# Virtual environment
+ENV
+
+# human subject data
+sample_data/confidential/*.*
