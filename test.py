@@ -57,27 +57,54 @@ class TestStampAtlas(unittest.TestCase):
 
     def test_smash_line(self):
         line = self.ati.f5lines[170]
-        exp = "PA1:Tha:tIthinkwouldbeachallengeunlessyouwere<reallyreallyfluent>[inthelanguage]."
-        self.assertEqual(self.ati.smash_line(line), exp)
+        exp = "PA1ThatIthinkwouldbeachallengeunlessyouwerereallyreallyfluentinthelanguage"
+        self.assertEqual(self.ati.smash_line(line, hard=True), exp)
 
     def test_smash_quote(self):
         quote1 = self.ati.quote_by_id('q1_193')
-        exp1 = "Tha:tIthinkwouldbeachallengeunlessyouwere<reallyreallyfluent>[inthelanguage]."
-        self.assertEqual(self.ati.smash_quote(quote1)[0], exp1)
+        exp1 = "ThatIthinkwouldbeachallengeunlessyouwerereallyreallyfluentinthelanguage"
+        self.assertEqual(self.ati.smash_quote(quote1, hard=True)[0], exp1)
         quote2 = self.ati.quote_by_id('q1_27')
         exp2 = ""
-        self.assertEqual(self.ati.smash_quote(quote2)[0], exp2)
+        self.assertEqual(self.ati.smash_quote(quote2, hard=True)[0], exp2)
 
     def test_find_matching_lines(self):
         expected1 = [(61, '\n'), (62, '00:03:26-6 PA1: Oh /wow/ [@@]\n')]
         result1 = self.ati.find_matching_lines(qid='q1_27')
         self.assertEqual(result1, expected1)
+
         expected2 = [(208, "00:09:25-5 PA1:\tWe didn't (.). That was u:m (.) most of the fraternities and sororities didn't have a house where most of the l-members lived. They would ha:ve (.) [dedicated hallways] in the dorms\n"),
             (209, '\n'),
             (210, "00:09:33-2 PA2: \t\t\t\t   [Oh okay]  \tOh okay.\n"),
             (211, '\n'),
             (212, "00:09:35-9 PA1: But I-I- (.) I'm really not sure of the reasoning of that other tha:n (.) um national fraternities and sororities were fairly new on campus. Every thing was local (.) [until] about six seven years before I went there. So it was a pretty big financial investment to actually have houses. \n")]
         result2 = self.ati.find_matching_lines(qid='q1_118')
+        self.assertEqual(result2, expected2)
+
+        # Trouble records
+        expected3 = [(176, "00:08:07-4 PA2: \t\t  [So] (1.8) /Yep/ so I was u:h-- I was in Massachusetts fo:r all three years. No vacations. @\n"),
+            (177, '\n'),
+            (178, "00:08:16-0 PA1: O:h no:. Did you--did you live close enough-- or was-- I'm guessing it wasn't close enough to drive home. Or did you just get to go home on break?\n")]
+        result3 = self.ati.find_matching_lines(qid='q1_343')
+        self.assertEqual(result3, expected3)
+
+        '''
+        # Corrected spelling causes no match
+        expected4 = [(78, "00:04:02-8 PA1: I tr:ied intramural volleyball briefly and I turned out to be really really bad at it, but it was [more] fun as a social event [I think then] \t\tthen actual sport. ")]
+        result4 = self.ati.find_matching_lines(qid='q1_35')
+        self.assertEqual(result4, expected4)
+        '''
+
+    def test_merge_timestamps(self):
+        errors = self.ati.merge_timestamps()
+        self.assertEqual(len(errors), 3)
+
+        result1 = self.ati.quote_by_id('q1_343').get('startTime')
+        expected1 = '00:08:07-4'
+        self.assertEqual(result1, expected1)
+
+        result2 = self.ati.quote_by_id('q1_343').get('estimatedEndTime')
+        expected2 = '00:08:24-6'
         self.assertEqual(result2, expected2)
 
 
