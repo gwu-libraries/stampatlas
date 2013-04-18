@@ -1,7 +1,4 @@
-import argparse
-import cgi
 from datetime import datetime
-from pprint import pprint
 import re
 
 from lxml import etree
@@ -9,6 +6,7 @@ import xlwt
 
 # Create constant string of chars to strip out of text for matching
 NON_ALPHANUMS = ''.join(c for c in map(chr, range(256)) if not c.isalnum())
+VOWELS = 'AaEeIiOoUu'
 
 
 class AtiXML():
@@ -81,6 +79,15 @@ class AtiXML():
         end = end.split('@')[1].strip()
         return int(start), int(end)
 
+    def quote_text(self, quote=None, qid=None):
+        try:
+            if quote is None:
+                quote = self.quote_by_id(qid)
+            return ''.join([p.text for p in quote.findall('content/p') if p.text])
+        except:
+            print 'Error with quote: %s' % quote.get('id')
+            raise
+
     def split_line(self, line):
         '''
         split F5 line into timestamp and rest of line
@@ -91,18 +98,20 @@ class AtiXML():
             return match.group(0), line[10:]
         return None, line
 
-    def smash_line(self, line, hard=False):
+    def smash_line(self, line, how_hard=0):
         '''
         Strips out all whitespace and, optionally, non-alphnumerics for easy 
         matching.
         '''
         timestamp, line = self.split_line(line)
         smashed = "".join(line.split())
-        if hard:
+        if how_hard > 0:
             smashed = smashed.translate(None, NON_ALPHANUMS)
+        if how_hard > 1:
+            smashed = smashed.translate(None, VOWELS)
         return smashed
 
-    def smash_quote(self, quote=None, qid=None, hard=False):
+    def smash_quote(self, quote=None, qid=None, how_hard=0):
         '''
         Returns a list of lines within a quote. Strips out all whitespace and,
         optionally, non-alphanumerics for easy matching.  Atlas.ti removes 
@@ -113,15 +122,21 @@ class AtiXML():
         plist = []
         for p in quote.findall('content/p'):
             if p.text:
-                smashed = ''.join(p.text.split())
-                if hard:
+                # as last resort use the shortened quote in the name attribute
+                if how_hard == 3:
+                    smashed = ''.join(quote.get('name').split())
+                else:
+                    smashed = ''.join(p.text.split())
+                if how_hard > 0:
                     smashed = smashed.translate(None, NON_ALPHANUMS)
+                if how_hard > 1:
+                    smashed = smashed.translate(None, VOWELS)
                 plist.append(smashed)
             else:
                 plist.append('')
         return plist
 
-    def find_matching_lines(self, q=None, qid=None, look_again=False):
+    def find_matching_lines(self, q=None, qid=None, rigor=0):
         '''
         Begins looking for matches on the line Atlas.ti says it should.
         However, various things can throw it off, so don't trust it.
@@ -131,19 +146,21 @@ class AtiXML():
         assert(q is not None or qid is not None)
         if q is None:
             q = self.quote_by_id(qid)
+        if rigor > 2:
+            return self.guess_matching_lines(q)
         # find starting point for search
         start, end = self.quote_line_nums(q)
         # find number of lines in quote and build empty match list
         length = end - start + 1
         matches = [None] * length
         # get the lines in the quote with whitespace removed
-        smshqs = self.smash_quote(q, hard=look_again)
+        smshqs = self.smash_quote(q, how_hard=rigor)
         # loop through each line in quote
         for i in range(length):
             # now loop through each line in f5 beginning from start
             while not matches[i] and start < len(self.f5lines):
                 # get f5 line with whitespace removed
-                smshln = self.smash_line(self.f5lines[start], hard=look_again)
+                smshln = self.smash_line(self.f5lines[start], how_hard=rigor)
                 # test for 'in' not '=='' because quotes in Atlas.ti don't always
                 # include the entire line
                 if smshqs[i] in smshln:
@@ -154,10 +171,12 @@ class AtiXML():
         # But before giving up, try again with non-alphanumerics stripped out.
         # We don't do this from the start because some lines are all symbols.
         if not all(matches):
-            if not look_again:
-                return self.find_matching_lines(q, look_again=True)
+            if rigor < 3:
+                return self.find_matching_lines(q, rigor=rigor+1)
             return None
         return matches
+
+
 
     def next_timestamp(self, linenum):
         time, line = None, None
@@ -172,6 +191,15 @@ class AtiXML():
             linenum -= 1
             time, line = self.split_line(self.f5lines[linenum])
         return time
+
+    def duration(self, start, end):
+        try:
+            s = datetime.strptime(start, "%H:%M:%S-%f")
+            e = datetime.strptime(end, "%H:%M:%S-%f")
+            return str(e - s)
+        except:
+            print 'ERROR calculating duration! start: %s  end: %s' % (start, end)
+            return ''
 
     def merge_timestamps(self, f5path=None):
         if f5path:
@@ -209,3 +237,43 @@ class AtiXML():
         output.write(etree.tostring(self.root))
         output.close()
         return errors
+
+    # Here begins the Excel methods
+
+    def writerow(self, sheet, rownum, values):
+        for celnum, value in enumerate(values):
+            sheet.write(rownum, celnum, value)
+
+    def writefirstrow(self, sheet):
+        labels = ['HU Name', 'Onset time', 'Est. Duration', 'Text', 'All Codes']
+        for code in self.codes:
+            labels.append(code.get('name'))
+        labels.append('Code Count')
+        self.writerow(sheet, 0, labels)
+
+    def writequotes(self, sheet):
+        for row, quote in enumerate(self.quotes, start=1):
+            values = [self.root.find('hermUnit').get('name')]
+            values.append(quote.get('startTime'))
+            values.append(self.duration(quote.get('startTime'),
+                quote.get('estimatedEndTime')))
+            values.append(self.quote_text(quote))
+            values.append([])
+            link_count = 0
+            for code in self.codes:
+                if self.link_exists(code.get('id'), quote.get('id')):
+                    values.append(1)
+                    values[4].append(code.get('name'))
+                    link_count += 1
+                else:
+                    values.append(0)
+            values[4] = ', '.join(values[4])
+            values.append(link_count)
+            self.writerow(sheet, row, values)
+
+    def export_to_excel(self, filename):
+        wkbk = xlwt.Workbook(encoding='utf-8')
+        sheet = wkbk.add_sheet('codings')
+        self.writefirstrow(sheet)
+        self.writequotes(sheet)
+        wkbk.save(filename)

@@ -42,9 +42,11 @@ class TestStampAtlas(unittest.TestCase):
         start, end = self.ati.quote_line_nums(q)
         self.assertEqual(start, 36)
         self.assertEqual(end, 36)
+
         start, end = self.ati.quote_line_nums(qid='q1_121')
         self.assertEqual(start, 42)
         self.assertEqual(end, 58)
+
         start, end = self.ati.quote_line_nums(qid='q1_27')
         self.assertEqual(start, 61)
         self.assertEqual(end, 62)
@@ -58,15 +60,15 @@ class TestStampAtlas(unittest.TestCase):
     def test_smash_line(self):
         line = self.ati.f5lines[170]
         exp = "PA1ThatIthinkwouldbeachallengeunlessyouwerereallyreallyfluentinthelanguage"
-        self.assertEqual(self.ati.smash_line(line, hard=True), exp)
+        self.assertEqual(self.ati.smash_line(line, how_hard=True), exp)
 
     def test_smash_quote(self):
         quote1 = self.ati.quote_by_id('q1_193')
         exp1 = "ThatIthinkwouldbeachallengeunlessyouwerereallyreallyfluentinthelanguage"
-        self.assertEqual(self.ati.smash_quote(quote1, hard=True)[0], exp1)
+        self.assertEqual(self.ati.smash_quote(quote1, how_hard=True)[0], exp1)
         quote2 = self.ati.quote_by_id('q1_27')
         exp2 = ""
-        self.assertEqual(self.ati.smash_quote(quote2, hard=True)[0], exp2)
+        self.assertEqual(self.ati.smash_quote(quote2, how_hard=True)[0], exp2)
 
     def test_find_matching_lines(self):
         expected1 = [(61, '\n'), (62, '00:03:26-6 PA1: Oh /wow/ [@@]\n')]
@@ -97,7 +99,7 @@ class TestStampAtlas(unittest.TestCase):
 
     def test_merge_timestamps(self):
         errors = self.ati.merge_timestamps()
-        self.assertEqual(len(errors), 3)
+        self.assertEqual(len(errors), 0)
 
         result1 = self.ati.quote_by_id('q1_343').get('startTime')
         expected1 = '00:08:07-4'
